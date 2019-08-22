@@ -362,3 +362,4 @@ gsearch5 = GridSearchCV(estimator = XGBClassifier(learning_rate = 0.01, n_estima
 
 gsearch5.fit(train_bal[predictors],train_bal['is_attributed'])
 gsearch5.cv_results_, gsearch5.best_params_, gsearch5.best_score_
+
