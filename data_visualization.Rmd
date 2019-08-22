@@ -1,0 +1,162 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(dplyr)
+library(lubridate)  #mdy_mh
+library(data.table)
+library(ggplot2)
+library(scales)
+library(gbm)
+
+# Read original dataset
+df <- read.csv(".../clickfraud.csv")  
+
+# Data preparation
+df$channel <- as.factor(df$channel)
+df$os <- as.factor(df$os)
+df$device <- as.factor(df$device)
+df$app <- as.factor(df$app)
+df$ip <- as.factor(df$ip)
+df$click_time <- ymd_hms(df$click_time)
+df$is_attributed <- as.factor(df$is_attributed)
+```
+
+```{r}
+# Categorical feature summary
+
+df1 <- df %>% select(2,3,4,5,6)
+df_ead <- data.frame(sapply(df1, nlevels))
+setDT(df_ead, keep.rownames = "TRUE")[]
+names(df_ead) <- c("feature", "level_count")
+
+ggplot(df_ead, aes(x = feature, y = level_count, fill = feature)) + 
+  geom_bar(stat = "identity") + 
+  ggtitle("Categorical Feature Summary") +
+  scale_fill_manual(values = c("gray52", "skyblue4", "peru", "indianred", "palegreen4")) +
+  geom_text(aes(label=level_count),vjust=-0.1) +
+  ylab("number of cardinality") +
+  xlab("categorical feature") 
+```
+
+
+```{r}
+# Distribution of categorical features
+
+## device
+df_device <- df %>% 
+  group_by(device) %>%
+  summarise(count = n()) %>%
+  top_n(10)
+
+p1 <- ggplot(df_device, aes(x=reorder(device, -count), y=count)) +
+  geom_bar(stat = "identity", fill = "skyblue4") +
+  xlab("device") +
+  theme(axis.text.x = element_text(angle=65, vjust=0.6))
+
+## app
+df_app <- df %>% 
+  group_by(app) %>%
+  summarise(count = n()) %>%
+  top_n(10)
+
+p2 <- ggplot(df_app, aes(x=reorder(app, -count), y=count)) +
+  geom_bar(stat = "identity", fill = "skyblue4") +
+  xlab("app") +
+  theme(axis.text.x = element_text(angle=65, vjust=0.6))
+
+## ip
+df_ip <- df %>% 
+  group_by(ip) %>%
+  summarise(count = n()) %>%
+  top_n(10)
+p3 <- ggplot(df_ip, aes(x=reorder(ip, -count), y=count)) +
+  geom_bar(stat = "identity", fill = "skyblue4") +
+  xlab("ip") +
+  theme(axis.text.x = element_text(angle=65, vjust=0.6))
+
+## channel
+df_channel <- df %>% 
+  group_by(channel) %>%
+  summarise(count = n()) %>%
+  top_n(10)
+
+p4 <- ggplot(df_channel, aes(x=reorder(channel, -count), y=count)) +
+  geom_bar(stat = "identity", fill = "skyblue4") +
+  xlab("channel") +
+  theme(axis.text.x = element_text(angle=65, vjust=0.6))
+
+## os
+df_os <- df %>% 
+  group_by(os) %>%
+  summarise(count = n()) %>%
+  top_n(10)
+p5 <- ggplot(df_os, aes(x=reorder(os, -count), y=count)) +
+  geom_bar(stat = "identity", fill = "skyblue4") +
+  xlab("os") +
+  theme(axis.text.x = element_text(angle=65, vjust=0.6))
+
+
+title = textGrob("Distribution of Categoricl Features",
+                 just="right", gp=gpar(fontsize=14))
+grid.arrange(p1, p2, p3, p4, p5, nrow = 2, top=title)
+```
+
+```{r}
+# Time series distribution of click records and fraud clicks
+
+df_series <- df %>%   
+  group_by(click_time) %>%
+  summarise(click_count = n(),
+            fraud_count = sum(is_attributed == 1)) 
+
+df_series$click_time <- ymd_hms(df_series$click_time)
+
+ead_1 <- ggplot(df_series, aes(x = click_time, y = click_count)) + 
+  geom_line(color = "peru") +
+  ggtitle("Time Series Click Distribution") +
+  ylab("click count per second") +
+  xlab("click time")
+
+ead_2 <- ggplot(df_series, aes(x = click_time, y = fraud_count)) + 
+  geom_line(color = "palegreen4") +
+  ggtitle("Time Series Fraud Distribution") +
+  ylab("fraud count per second") +
+  xlab("click time")
+
+grid.arrange(ead_1, ead_2, nrow = 2)
+```
+
+
+```{r}
+# Visualization of imbalance
+
+prop.table(table(df$is_attributed))
+
+## 80/20 split
+train_row <- ceiling(0.8*dim(df)[1])
+train <- 1:train_row
+data.train <- df[train,]
+data.test <- df[-train,]
+
+## before balancing
+p1 <- ggplot(data.train, aes(x=is_attributed)) + 
+  geom_bar(fill = "skyblue4") +
+  ggtitle(expression(atop("Imbalanced Label", atop(italic("Before Balancing"), ""))))+
+  geom_text(stat='count', aes(label=paste0((round(..count..*100/sum(..count..),2)),"%")), size=3.5, vjust=-0.1)
+
+## after balancing
+train_bal = read.csv(".../train_bal.csv")
+train_bal$is_attributed <- as.factor(train_bal$is_attributed)
+p2 <- ggplot(train_bal, aes(x=is_attributed)) + 
+  geom_bar(fill = "skyblue4") +
+  ggtitle(expression(atop("Imbalanced Label", atop(italic("After Balancing"), "")))) +
+  geom_text(stat='count', aes(label=(..count..)), size=3.5, vjust=-0.1)
+
+grid.arrange(p1, p2, nrow = 1)
+
+```
+
